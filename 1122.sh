@@ -2,7 +2,7 @@
 
 # =================================================================
 # 脚本名称: Xray 双协议自动化管理脚本
-# 脚本版本: v1.7 (核心路径智能检测版)
+# 脚本版本: v1.8 (安装状态强制校验版)
 # 适用系统: Ubuntu / Debian (x86_64 / arm64)
 # 支持协议: VLESS-XTLS-Reality / VLESS+WS 免流
 # =================================================================
@@ -44,8 +44,18 @@ check_xray_installed() {
 # 1. 安装或更新 Xray 核心
 install_xray_core() {
     echo -e "${BLUE}[+] 正在调用官方脚本下载/更新核心...${NC}"
+    echo -e "${YELLOW}[!] 请注意观察下方输出，如果出现 'error' 或 'Failed'，说明服务器网络无法访问 GitHub！${NC}"
+    
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --logrotate
-    echo -e "${GREEN}[+] 核心部署成功！${NC}"
+    
+    # 实时校验是否真正安装成功
+    check_xray_installed
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}[+] 核心部署成功！已在系统中找到可执行文件。${NC}"
+    else
+        echo -e "${RED}[-] 核心部署失败！${NC}"
+        echo -e "${YELLOW}原因：官方安装程序未能成功下载 Xray 核心。这通常是因为您的 VPS 服务器连接 GitHub 遭到了屏蔽，或者触发了 GitHub 的下载次数限制。${NC}"
+    fi
 }
 
 # 2. 完全卸载 Xray
@@ -218,7 +228,12 @@ config_xray_flexible() {
     INBOUNDS_JSON=""
 
     if [ "$ENABLE_REALITY" = true ]; then
-        KEYS=$($XRAY_BIN x25519)
+        KEYS=$($XRAY_BIN x25519 2>/dev/null)
+        if [ -z "$KEYS" ]; then
+            echo -e "${RED}致命错误：找不到 Xray 核心，无法生成 Reality 密钥！请先安装核心。${NC}"
+            read -p "按回车键退出..." dummy
+            exit 1
+        fi
         PRIVATE_KEY=$(echo "$KEYS" | grep "Private key:" | awk '{print $3}')
         SHORT_ID=$(openssl rand -hex 8)
 
@@ -307,7 +322,7 @@ EOF
 while true; do
     clear
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.7     ${NC}"
+    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.8     ${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo -e " 1. 一键安装 Xray 并配置新协议"
     echo -e " 2. 修改 / 覆盖现有协议配置"
@@ -326,9 +341,12 @@ while true; do
         2)
             check_xray_installed
             if [ $? -ne 0 ]; then
-                echo -e "${RED}错误：本地未安装 Xray 核心，请先选择 1 安装核心！${NC}"
-                read -p "按回车键继续..." dummy
-                continue
+                echo -e "${RED}警告：系统未能检测到 Xray 核心可执行文件！${NC}"
+                echo -e "${YELLOW}原因：刚才【选项 1】在后台下载时，因网络超时或 GitHub 屏蔽而默默失败了。${NC}"
+                read -p "即使核心缺失，仍然强行修改配置文件吗？[y/N]: " FORCE_EDIT
+                if [[ ! "$FORCE_EDIT" =~ ^[Yy]$ ]]; then
+                    continue
+                fi
             fi
             config_xray_flexible
             ;;
@@ -338,7 +356,7 @@ while true; do
         4)
             install_xray_core
             systemctl restart xray >/dev/null 2>&1
-            echo -e "${GREEN}[+] Xray 核心更新成功并已重启！${NC}"
+            echo -e "${GREEN}[+] Xray 核心更新检测完毕！${NC}"
             read -p "按回车键继续..." dummy
             ;;
         5)
