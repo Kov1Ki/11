@@ -2,7 +2,7 @@
 
 # =================================================================
 # 脚本名称: Xray 双协议自动化管理脚本
-# 脚本版本: v1.8 (安装状态强制校验版)
+# 脚本版本: v2.0 (极致交互优化版)
 # 适用系统: Ubuntu / Debian (x86_64 / arm64)
 # 支持协议: VLESS-XTLS-Reality / VLESS+WS 免流
 # =================================================================
@@ -41,24 +41,65 @@ check_xray_installed() {
     fi
 }
 
-# 1. 安装或更新 Xray 核心
+# 1. 智能安装或更新 Xray 核心
 install_xray_core() {
-    echo -e "${BLUE}[+] 正在调用官方脚本下载/更新核心...${NC}"
-    echo -e "${YELLOW}[!] 请注意观察下方输出，如果出现 'error' 或 'Failed'，说明服务器网络无法访问 GitHub！${NC}"
-    
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --logrotate
-    
-    # 实时校验是否真正安装成功
+    clear
+    echo -e "${BLUE}==================================================${NC}"
+    echo -e "${BLUE}             Xray 核心安装与状态检查              ${NC}"
+    echo -e "${BLUE}==================================================${NC}"
+
     check_xray_installed
     if [ $? -eq 0 ]; then
-        echo -e "${GREEN}[+] 核心部署成功！已在系统中找到可执行文件。${NC}"
+        # 获取本地版本
+        LOCAL_VER=$($XRAY_BIN version | head -n 1 | awk '{print $2}')
+        
+        # 获取线上最新版本 (屏蔽 grep 错误输出)
+        LATEST_VER=$(curl -sL "https://api.github.com/repos/XTLS/Xray-core/releases/latest" | grep '"tag_name":' 2>/dev/null | sed -E 's/.*"v([^"]+)".*/\1/')
+        
+        # 兼容处理: 如果无法获取线上版本，则仅提示已安装
+        if [ -z "$LATEST_VER" ]; then
+             echo -e "${GREEN}[+] 系统已安装 Xray 核心！${NC}"
+             echo -e "当前本地版本: ${CYAN}v${LOCAL_VER}${NC}"
+             echo -e "${YELLOW}提示: 由于网络原因无法获取 GitHub 最新版本信息，跳过更新检查。${NC}"
+             read -p "按回车键返回主菜单..." dummy
+             return
+        fi
+
+        echo -e "${GREEN}[+] 系统已安装 Xray 核心！${NC}"
+        echo -e "当前本地版本: ${CYAN}v${LOCAL_VER}${NC}"
+        echo -e "线上最新版本: ${CYAN}v${LATEST_VER}${NC}"
+        echo -e "--------------------------------------------------"
+
+        if [ "$LOCAL_VER" != "$LATEST_VER" ] && [ -n "$LOCAL_VER" ]; then
+            echo -e "${YELLOW}发现新版本！${NC}"
+            read -p "是否立刻更新到 v${LATEST_VER}？[y/N]: " CHOOSE_UPDATE
+            if [[ ! "$CHOOSE_UPDATE" =~ ^[Yy]$ ]]; then
+                echo -e "已取消更新。"
+                sleep 1
+                return
+            fi
+        else
+            echo -e "${GREEN}当前已是最新版本，无需更新！${NC}"
+            read -p "按回车键返回主菜单..." dummy
+            return
+        fi
     else
-        echo -e "${RED}[-] 核心部署失败！${NC}"
-        echo -e "${YELLOW}原因：官方安装程序未能成功下载 Xray 核心。这通常是因为您的 VPS 服务器连接 GitHub 遭到了屏蔽，或者触发了 GitHub 的下载次数限制。${NC}"
+        echo -e "${YELLOW}[!] 未检测到 Xray 核心，准备开始全新安装...${NC}"
     fi
+
+    echo -e "${BLUE}[+] 正在调用官方脚本下载核心...${NC}"
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+    
+    check_xray_installed
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}[+] 核心部署成功！${NC}"
+    else
+        echo -e "${RED}[-] 核心部署失败！请检查服务器连接 GitHub 的网络状态。${NC}"
+    fi
+    read -p "按回车键返回主菜单..." dummy
 }
 
-# 2. 完全卸载 Xray
+# 3. 完全卸载 Xray
 uninstall_xray() {
     clear
     echo -e "${RED}==================================================${NC}"
@@ -78,7 +119,7 @@ uninstall_xray() {
     read -p "按回车键返回主菜单..." dummy
 }
 
-# 3. 解析并展示当前配置与链接
+# 4. 解析并展示当前配置与链接
 view_current_config() {
     clear
     echo -e "${BLUE}==================================================${NC}"
@@ -86,7 +127,7 @@ view_current_config() {
     echo -e "${BLUE}==================================================${NC}"
 
     if [ ! -f "$CONFIG_FILE" ]; then
-        echo -e "${RED}提示：未检测到配置文件，请先选择选项 1 进行全新安装。${NC}"
+        echo -e "${RED}提示：未检测到配置文件，请先选择选项 2 进行配置写入。${NC}"
         read -p "按回车键返回主菜单..." dummy
         return
     fi
@@ -138,23 +179,43 @@ view_current_config() {
     read -p "按回车键返回主菜单..." dummy
 }
 
-# 4. 灵活配置向导
+# 2. 子菜单交互式配置向导
 config_xray_flexible() {
+    check_xray_installed
+    if [ $? -ne 0 ]; then
+        echo -e "${RED}警告：系统未能检测到 Xray 核心可执行文件！${NC}"
+        echo -e "${YELLOW}请先退回主菜单执行 [选项 1] 安装核心。${NC}"
+        read -p "即使核心缺失，仍然强行修改配置文件吗？[y/N]: " FORCE_EDIT
+        if [[ ! "$FORCE_EDIT" =~ ^[Yy]$ ]]; then
+            return
+        fi
+    fi
+
     clear
     echo -e "${BLUE}==================================================${NC}"
-    echo -e "${BLUE}              Xray 协议自定义配置面板               ${NC}"
+    echo -e "${BLUE}              Xray 协议配置管理器子菜单             ${NC}"
     echo -e "${BLUE}==================================================${NC}"
+    echo -e " 请选择您要配置的协议组合模式："
+    echo -e " ${GREEN}1. 仅配置 VLESS-XTLS-Reality (抗封锁推荐)${NC}"
+    echo -e " ${GREEN}2. 仅配置 VLESS+WS (免流推荐)${NC}"
+    echo -e " ${GREEN}3. 双协议同时配置 (共存模式)${NC}"
+    echo -e " 0. 返回主菜单"
+    echo -e "${BLUE}==================================================${NC}"
+    read -p "请输入选项 [0-3]: " PROTO_CHOICE
 
     ENABLE_REALITY=false
     ENABLE_WS=false
 
-    check_xray_installed
+    case $PROTO_CHOICE in
+        1) ENABLE_REALITY=true ;;
+        2) ENABLE_WS=true ;;
+        3) ENABLE_REALITY=true; ENABLE_WS=true ;;
+        0) return ;;
+        *) echo -e "${RED}无效输入，返回主菜单。${NC}"; sleep 1; return ;;
+    esac
 
-    # 4.1 询问配置 Reality
-    read -p "是否启用 VLESS-XTLS-Reality？[y/N]: " CHOOSE_REALITY
-    if [[ "$CHOOSE_REALITY" =~ ^[Yy]$ ]]; then
-        ENABLE_REALITY=true
-        
+    # 配置 Reality 变量
+    if [ "$ENABLE_REALITY" = true ]; then
         echo -e "\n${YELLOW}▶ Reality 端口设置${NC}"
         echo -e "1. 随机自动生成高端口 [10000-65535]\n2. 手动输入自定义端口"
         read -p "请选择 [默认 1]: " REALITY_PORT_CHOICE
@@ -180,12 +241,8 @@ config_xray_flexible() {
         DEST=${DEST:-www.microsoft.com}
     fi
 
-    # 4.2 询问配置 VLESS+WS 免流
-    echo -e "${BLUE}--------------------------------------------------${NC}"
-    read -p "是否启用 VLESS+WS [免流方案]？[y/N]: " CHOOSE_WS
-    if [[ "$CHOOSE_WS" =~ ^[Yy]$ ]]; then
-        ENABLE_WS=true
-
+    # 配置 WS 变量
+    if [ "$ENABLE_WS" = true ]; then
         echo -e "\n${YELLOW}▶ VLESS+WS 端口设置${NC}"
         echo -e "1. 使用免流推荐端口 [80]\n2. 手动输入自定义端口"
         read -p "请选择 [默认 1]: " WS_PORT_CHOICE
@@ -216,12 +273,6 @@ config_xray_flexible() {
         else
             UUID_WS=$($XRAY_BIN uuid 2>/dev/null || cat /proc/sys/kernel/random/uuid)
         fi
-    fi
-
-    if [ "$ENABLE_REALITY" = false ] && [ "$ENABLE_WS" = false ]; then
-        echo -e "${RED}错误：未选择任何协议，未变更任何配置。${NC}"
-        read -p "按回车键返回..." dummy
-        return
     fi
 
     # 动态拼接 Inbounds JSON
@@ -322,44 +373,27 @@ EOF
 while true; do
     clear
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.8     ${NC}"
+    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v2.0     ${NC}"
     echo -e "${GREEN}========================================${NC}"
-    echo -e " 1. 一键安装 Xray 并配置新协议"
-    echo -e " 2. 修改 / 覆盖现有协议配置"
+    echo -e " 1. 检查并安装/更新 Xray 核心"
+    echo -e " 2. 添加 / 修改协议配置 (Reality/免流)"
     echo -e " 3. 查看当前协议配置与链接"
-    echo -e " 4. 仅更新 Xray 核心版本"
-    echo -e " 5. 一键卸载 Xray 核心及配置"
+    echo -e " 4. 一键卸载 Xray 核心及配置"
     echo -e " 0. 退出脚本"
     echo -e "${GREEN}========================================${NC}"
-    read -p "请选择操作 [0-5]: " choice
+    read -p "请选择操作 [0-4]: " choice
 
     case $choice in
         1)
             install_xray_core
-            config_xray_flexible
             ;;
         2)
-            check_xray_installed
-            if [ $? -ne 0 ]; then
-                echo -e "${RED}警告：系统未能检测到 Xray 核心可执行文件！${NC}"
-                echo -e "${YELLOW}原因：刚才【选项 1】在后台下载时，因网络超时或 GitHub 屏蔽而默默失败了。${NC}"
-                read -p "即使核心缺失，仍然强行修改配置文件吗？[y/N]: " FORCE_EDIT
-                if [[ ! "$FORCE_EDIT" =~ ^[Yy]$ ]]; then
-                    continue
-                fi
-            fi
             config_xray_flexible
             ;;
         3)
             view_current_config
             ;;
         4)
-            install_xray_core
-            systemctl restart xray >/dev/null 2>&1
-            echo -e "${GREEN}[+] Xray 核心更新检测完毕！${NC}"
-            read -p "按回车键继续..." dummy
-            ;;
-        5)
             uninstall_xray
             ;;
         0)
