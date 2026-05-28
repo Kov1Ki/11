@@ -1,9 +1,10 @@
 #!/bin/bash
 
 # =================================================================
-# 脚本名称: Xray 自动化管理脚本
-# 脚本版本: v1.0
+# 脚本名称: Xray 双协议自动化管理脚本
+# 脚本版本: v2.1 (自定义Host与端口优化版)
 # 适用系统: Ubuntu / Debian (x86_64 / arm64)
+# 支持协议: VLESS-XTLS-Reality / VLESS+WS 免流
 # =================================================================
 
 # 定义颜色输出
@@ -155,7 +156,7 @@ view_current_config() {
 
         if [ -n "$UUID_REALITY" ] && [ -n "$PORT_REALITY" ]; then
             REALITY_LINK="vless://${UUID_REALITY}@${SERVER_IP}:${PORT_REALITY}?security=reality&encryption=none&pbk=${PUBLIC_KEY}&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=${DEST}&sid=${SHORT_ID}#Reality_${SERVER_IP}"
-            echo -e "${PURPLE}[+] VLESS-XTLS-Reality 链接:${NC}"
+            echo -e "${PURPLE}[+] VLESS-XTLS-Reality [抗封锁] 链接:${NC}"
             echo -e "${CYAN}${REALITY_LINK}${NC}"
             echo -e "--------------------------------------------------"
         fi
@@ -172,7 +173,7 @@ view_current_config() {
         
         if [ -n "$UUID_WS" ] && [ -n "$PORT_WS" ]; then
             WS_LINK="vless://${UUID_WS}@${SERVER_IP}:${PORT_WS}?path=%2F&security=&encryption=none&host=${HOST_NAME}&type=ws#VLESS_WS_${SERVER_IP}"
-            echo -e "${PURPLE}[+] VLESS+WebSocket 链接:${NC}"
+            echo -e "${PURPLE}[+] VLESS+WebSocket [免流专用] 链接:${NC}"
             echo -e "${CYAN}${WS_LINK}${NC}"
             echo -e "--------------------------------------------------"
         fi
@@ -198,9 +199,9 @@ config_xray_flexible() {
     echo -e "${BLUE}              Xray 协议配置管理器子菜单             ${NC}"
     echo -e "${BLUE}==================================================${NC}"
     echo -e " 请选择您要配置的协议组合模式："
-    echo -e " ${GREEN}1. 仅配置 VLESS-XTLS-Reality${NC}"
-    echo -e " ${GREEN}2. 仅配置 VLESS+WS${NC}"
-    echo -e " ${GREEN}3. 部署所有协议${NC}"
+    echo -e " ${GREEN}1. 仅配置 VLESS-XTLS-Reality (抗封锁推荐)${NC}"
+    echo -e " ${GREEN}2. 仅配置 VLESS+WS (免流推荐)${NC}"
+    echo -e " ${GREEN}3. 双协议同时配置 (共存模式)${NC}"
     echo -e " 0. 返回主菜单"
     echo -e "${BLUE}==================================================${NC}"
     read -p "请输入选项 [0-3]: " PROTO_CHOICE
@@ -229,7 +230,7 @@ config_xray_flexible() {
         fi
 
         echo -e "\n${YELLOW}▶ Reality UUID 设置${NC}"
-        echo -e "1. 随机自动生成\n2. 手动输入自定义 UUID"
+        echo -e "1. 随机自动生成 [推荐]\n2. 手动输入自定义 UUID"
         read -p "请选择 [默认 1]: " REALITY_UUID_CHOICE
         if [ "${REALITY_UUID_CHOICE:-1}" -eq 2 ]; then
             read -p "请输入 UUID: " USER_REALITY_UUID
@@ -246,16 +247,16 @@ config_xray_flexible() {
     # 配置 WS 变量
     if [ "$ENABLE_WS" = true ]; then
         echo -e "\n${YELLOW}▶ VLESS+WS 端口设置${NC}"
-        echo -e "1. 随机自动生成高端口 [10000-65535]\n2. 手动输入自定义端口"
+        echo -e "1. 使用免流推荐端口 [80]\n2. 手动输入自定义端口"
         read -p "请选择 [默认 1]: " WS_PORT_CHOICE
         
         ws_port_loop=true
         while [ "$ws_port_loop" = true ]; do
             if [ "${WS_PORT_CHOICE:-1}" -eq 2 ]; then
-                read -p "请输入自定义端口 [回车默认 80]: " PORT_WS
-                PORT_WS=${PORT_WS:-80}
+                read -p "请输入自定义端口 [回车默认 443]: " PORT_WS
+                PORT_WS=${PORT_WS:-443}
             else
-                PORT_WS=$((RANDOM % 55536 + 10000))
+                PORT_WS=80
             fi
 
             if [ "$ENABLE_REALITY" = true ] && [ "$PORT_REALITY" -eq "$PORT_WS" ]; then
@@ -396,10 +397,10 @@ EOF
 while true; do
     clear
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.0     ${NC}"
+    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v2.1     ${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo -e " 1. 检查并安装/更新 Xray 核心"
-    echo -e " 2. 添加 / 修改协议配置"
+    echo -e " 2. 添加 / 修改协议配置 (Reality/免流)"
     echo -e " 3. 查看当前协议配置与链接"
     echo -e " 4. 一键卸载 Xray 核心及配置"
     echo -e " 0. 退出脚本"
