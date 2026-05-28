@@ -2,7 +2,7 @@
 
 # =================================================================
 # 脚本名称: Xray 双协议自动化管理脚本
-# 脚本版本: v2.0 (极致交互优化版)
+# 脚本版本: v2.1 (自定义Host与端口优化版)
 # 适用系统: Ubuntu / Debian (x86_64 / arm64)
 # 支持协议: VLESS-XTLS-Reality / VLESS+WS 免流
 # =================================================================
@@ -166,7 +166,10 @@ view_current_config() {
     if grep -q '"network": "ws"' "$CONFIG_FILE"; then
         PORT_WS=$(grep -B 10 '"network": "ws"' "$CONFIG_FILE" | grep '"port"' | tail -n 1 | tr -d -c '0-9')
         UUID_WS=$(grep -B 10 '"network": "ws"' "$CONFIG_FILE" | grep '"id"' | tail -n 1 | awk -F'"' '{for(i=1;i<=NF;i++) if($i=="id") print $(i+2)}')
-        HOST_NAME="t7z.cupid.iqiyi.com"
+        
+        # 提取自定义 Host
+        HOST_NAME=$(grep -A 5 '"wsSettings"' "$CONFIG_FILE" | grep -i '"Host"' | head -n 1 | awk -F'"' '{print $4}')
+        HOST_NAME=${HOST_NAME:-"t7z.cupid.iqiyi.com"}
         
         if [ -n "$UUID_WS" ] && [ -n "$PORT_WS" ]; then
             WS_LINK="vless://${UUID_WS}@${SERVER_IP}:${PORT_WS}?path=%2F&security=&encryption=none&host=${HOST_NAME}&type=ws#VLESS_WS_${SERVER_IP}"
@@ -220,7 +223,7 @@ config_xray_flexible() {
         echo -e "1. 随机自动生成高端口 [10000-65535]\n2. 手动输入自定义端口"
         read -p "请选择 [默认 1]: " REALITY_PORT_CHOICE
         if [ "${REALITY_PORT_CHOICE:-1}" -eq 2 ]; then
-            read -p "请输入端口 [默认 443]: " PORT_REALITY
+            read -p "请输入自定义端口 [回车默认 443]: " PORT_REALITY
             PORT_REALITY=${PORT_REALITY:-443}
         else
             PORT_REALITY=$((RANDOM % 55536 + 10000))
@@ -237,7 +240,7 @@ config_xray_flexible() {
         fi
 
         echo -e ""
-        read -p "请输入 Reality 伪装目标网站 [默认 www.microsoft.com]: " DEST
+        read -p "请输入 Reality 伪装目标网站 [回车默认 www.microsoft.com]: " DEST
         DEST=${DEST:-www.microsoft.com}
     fi
 
@@ -250,8 +253,8 @@ config_xray_flexible() {
         ws_port_loop=true
         while [ "$ws_port_loop" = true ]; do
             if [ "${WS_PORT_CHOICE:-1}" -eq 2 ]; then
-                read -p "请输入端口 [默认 21985]: " PORT_WS
-                PORT_WS=${PORT_WS:-21985}
+                read -p "请输入自定义端口 [回车默认 443]: " PORT_WS
+                PORT_WS=${PORT_WS:-443}
             else
                 PORT_WS=80
             fi
@@ -273,6 +276,22 @@ config_xray_flexible() {
         else
             UUID_WS=$($XRAY_BIN uuid 2>/dev/null || cat /proc/sys/kernel/random/uuid)
         fi
+
+        echo -e "\n${YELLOW}▶ 免流伪装 Host 设置${NC}"
+        echo -e "1. 使用默认爱奇艺 Host [t7z.cupid.iqiyi.com]\n2. 手动输入自定义 Host"
+        read -p "请选择 [默认 1]: " HOST_CHOICE
+        if [ "${HOST_CHOICE:-1}" -eq 2 ]; then
+            read -p "请输入自定义免流 Host [回车默认 t7z.cupid.iqiyi.com]: " HOST_NAME
+            HOST_NAME=${HOST_NAME:-"t7z.cupid.iqiyi.com"}
+        else
+            HOST_NAME="t7z.cupid.iqiyi.com"
+        fi
+    fi
+
+    if [ "$ENABLE_REALITY" = false ] && [ "$ENABLE_WS" = false ]; then
+        echo -e "${RED}错误：未选择任何协议，未变更任何配置。${NC}"
+        read -p "按回车键返回..." dummy
+        return
     fi
 
     # 动态拼接 Inbounds JSON
@@ -325,7 +344,12 @@ EOF
           },
           "streamSettings": {
             "network": "ws",
-            "wsSettings": { "path": "/" }
+            "wsSettings": { 
+                "path": "/",
+                "headers": {
+                    "Host": "$HOST_NAME"
+                }
+            }
           }
         }
 EOF
@@ -373,7 +397,7 @@ EOF
 while true; do
     clear
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v2.0     ${NC}"
+    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v2.1     ${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo -e " 1. 检查并安装/更新 Xray 核心"
     echo -e " 2. 添加 / 修改协议配置 (Reality/免流)"
