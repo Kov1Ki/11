@@ -2,7 +2,7 @@ script_content = """#!/bin/bash
 
 # =================================================================
 # 脚本名称: Xray 双协议自动化管理脚本
-# 脚本版本: v1.0
+# 脚本版本: v1.1
 # 适用系统: Ubuntu / Debian (x86_64 / arm64)
 # 支持协议: VLESS-XTLS-Reality / VLESS+WS 免流
 # 语言版本: 简体中文版
@@ -19,6 +19,7 @@ NC='\\033[0m'
 
 CONFIG_FILE="/usr/local/etc/xray/config.json"
 XRAY_BIN="/usr/local/bin/xray"
+SCRIPT_URL="https://raw.githubusercontent.com/Kov1Ki/11/refs/heads/main/1122.sh"
 
 # 检查 root 权限
 if [[ $EUID -ne 0 ]]; then
@@ -33,7 +34,46 @@ install_xray_core() {
     echo -e "${GREEN}[Xray] 核心部署成功！${NC}"
 }
 
-# 2. 解析并展示当前配置与链接
+# 2. 完全卸载 Xray
+uninstall_xray() {
+    clear
+    echo -e "${RED}==================================================${NC}"
+    echo -e "${RED}             正在卸载 Xray 核心及配置              ${NC}"
+    echo -e "${RED}==================================================${NC}"
+    read -p "确定要完全卸载 Xray 吗？该操作不可逆！[y/N]: " CONFIRM_UNINSTALL
+    if [[ "$CONFIRM_UNINSTALL" =~ ^[Yy]$ ]]; then
+        echo -e "${BLUE}[Xray] 正在调用官方卸载程序...${NC}"
+        bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove --purge
+        echo -e "${BLUE}[Xray] 正在清理残留配置文件与日志...${NC}"
+        rm -rf /usr/local/etc/xray
+        rm -rf /var/log/xray
+        echo -e "${GREEN}[Xray] 卸载完成，所有相关核心、配置及日志已彻底清除。${NC}"
+    else
+        echo -e "${YELLOW}[Xray] 已取消卸载操作。${NC}"
+    fi
+    read -p "按回车键返回主菜单..." dummy
+}
+
+# 3. 更新管理脚本本身
+update_management_script() {
+    echo -e "${BLUE}[Xray] 正在从 GitHub 获取最新脚本...${NC}"
+    CURRENT_SCRIPT=$(readlink -f "$0")
+    
+    # 下载到临时文件
+    curl -s -L "$SCRIPT_URL" -o "${CURRENT_SCRIPT}.tmp"
+    if [ $? -eq 0 ] && [ -s "${CURRENT_SCRIPT}.tmp" ]; then
+        mv "${CURRENT_SCRIPT}.tmp" "$CURRENT_SCRIPT"
+        chmod +x "$CURRENT_SCRIPT"
+        echo -e "${GREEN}[Xray] 脚本已成功更新至最新版本！请重新运行脚本。${NC}"
+        exit 0
+    else
+        rm -f "${CURRENT_SCRIPT}.tmp"
+        echo -e "${RED}错误：脚本下载失败，请检查服务器网络或 GitHub 链接是否有效！${NC}"
+        read -p "按回车键继续..." dummy
+    fi
+}
+
+# 4. 解析并展示当前配置与链接
 view_current_config() {
     clear
     echo -e "${BLUE}==================================================${NC}"
@@ -106,7 +146,7 @@ except:
     read -p "按回车键返回主菜单..." dummy
 }
 
-# 3. 灵活配置向导
+# 5. 灵活配置向导
 config_xray_flexible() {
     clear
     echo -e "${BLUE}==================================================${NC}"
@@ -116,7 +156,7 @@ config_xray_flexible() {
     ENABLE_REALITY=false
     ENABLE_WS=false
 
-    # 3.1 询问配置 Reality
+    # 5.1 询问配置 Reality
     read -p "是否启用 VLESS-XTLS-Reality？[y/N]: " CHOOSE_REALITY
     if [[ "$CHOOSE_REALITY" =~ ^[Yy]$ ]]; then
         ENABLE_REALITY=true
@@ -146,7 +186,7 @@ config_xray_flexible() {
         DEST=${DEST:-www.microsoft.com}
     fi
 
-    # 3.2 询问配置 VLESS+WS 免流
+    # 5.2 询问配置 VLESS+WS 免流
     echo -e "${BLUE}--------------------------------------------------${NC}"
     read -p "是否启用 VLESS+WS (免流方案)？[y/N]: " CHOOSE_WS
     if [[ "$CHOOSE_WS" =~ ^[Yy]$ ]]; then
@@ -290,15 +330,17 @@ EOF
 while true; do
     clear
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.0     ${NC}"
+    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.1     ${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo -e " 1. 一键安装 Xray 并配置新协议"
     echo -e " 2. 修改 / 覆盖现有协议配置"
     echo -e " 3. 查看当前协议配置与链接"
     echo -e " 4. 仅更新 Xray 核心版本"
+    echo -e " 5. 一键卸载 Xray 核心及配置"
+    echo -e " 6. 更新本管理脚本"
     echo -e " 0. 退出脚本"
     echo -e "${GREEN}========================================${NC}"
-    read -p "请选择操作 [0-4]: " choice
+    read -p "请选择操作 [0-6]: " choice
 
     case $choice in
         1)
@@ -322,6 +364,12 @@ while true; do
             echo -e "${GREEN}>>> Xray 核心更新成功并已重启！${NC}"
             read -p "按回车键继续..." dummy
             ;;
+        5)
+            uninstall_xray
+            ;;
+        6)
+            update_management_script
+            ;;
         0)
             echo "退出脚本。"
             exit 0
@@ -333,6 +381,10 @@ while true; do
     esac
 done
 """
+
+with open("xray-management-v1.1-zh.sh", "w") as f:
+    f.write(script_content)
+print("Updated script version 1.1 successfully generated.")
 
 with open("xray-management-v1.0-zh-v2.sh", "w") as f:
     f.write(script_content)
