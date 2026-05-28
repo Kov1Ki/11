@@ -2,7 +2,7 @@
 
 # =================================================================
 # 脚本名称: Xray 双协议自动化管理脚本
-# 脚本版本: v1.6 (精准链接解析对齐版)
+# 脚本版本: v1.7 (核心路径智能检测版)
 # 适用系统: Ubuntu / Debian (x86_64 / arm64)
 # 支持协议: VLESS-XTLS-Reality / VLESS+WS 免流
 # =================================================================
@@ -24,6 +24,22 @@ if [[ $EUID -ne 0 ]]; then
    echo -e "${RED}错误: 必须使用 root 权限运行此脚本！${NC}" 
    exit 1
 fi
+
+# 智能检查 Xray 核心安装路径
+check_xray_installed() {
+    if command -v xray >/dev/null 2>&1; then
+        XRAY_BIN=$(command -v xray)
+        return 0
+    elif [ -f "/usr/local/bin/xray" ]; then
+        XRAY_BIN="/usr/local/bin/xray"
+        return 0
+    elif [ -f "/usr/bin/xray" ]; then
+        XRAY_BIN="/usr/bin/xray"
+        return 0
+    else
+        return 1
+    fi
+}
 
 # 1. 安装或更新 Xray 核心
 install_xray_core() {
@@ -72,7 +88,9 @@ view_current_config() {
     echo -e "${BLUE}--------------------------------------------------${NC}"
     echo -e "${YELLOW}【解析生成的客户端导入链接】${NC}"
 
-    # 纯 Bash 解析 Reality 链接 (修复错位提取)
+    check_xray_installed
+
+    # 纯 Bash 解析 Reality 链接
     if grep -q '"security": "reality"' "$CONFIG_FILE"; then
         PORT_REALITY=$(grep -B 5 '"security": "reality"' "$CONFIG_FILE" | grep '"port"' | head -n 1 | tr -d -c '0-9')
         UUID_REALITY=$(grep -B 5 '"security": "reality"' "$CONFIG_FILE" | grep '"id"' | head -n 1 | awk -F'"' '{for(i=1;i<=NF;i++) if($i=="id") print $(i+2)}')
@@ -93,7 +111,7 @@ view_current_config() {
         fi
     fi
 
-    # 纯 Bash 解析 VLESS+WS 免流链接 (精准对齐标准导入格式)
+    # 纯 Bash 解析 VLESS+WS 免流链接
     if grep -q '"network": "ws"' "$CONFIG_FILE"; then
         PORT_WS=$(grep -B 10 '"network": "ws"' "$CONFIG_FILE" | grep '"port"' | tail -n 1 | tr -d -c '0-9')
         UUID_WS=$(grep -B 10 '"network": "ws"' "$CONFIG_FILE" | grep '"id"' | tail -n 1 | awk -F'"' '{for(i=1;i<=NF;i++) if($i=="id") print $(i+2)}')
@@ -119,6 +137,8 @@ config_xray_flexible() {
 
     ENABLE_REALITY=false
     ENABLE_WS=false
+
+    check_xray_installed
 
     # 4.1 询问配置 Reality
     read -p "是否启用 VLESS-XTLS-Reality？[y/N]: " CHOOSE_REALITY
@@ -287,7 +307,7 @@ EOF
 while true; do
     clear
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.6     ${NC}"
+    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.7     ${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo -e " 1. 一键安装 Xray 并配置新协议"
     echo -e " 2. 修改 / 覆盖现有协议配置"
@@ -304,7 +324,8 @@ while true; do
             config_xray_flexible
             ;;
         2)
-            if [ ! -f "$XRAY_BIN" ]; then
+            check_xray_installed
+            if [ $? -ne 0 ]; then
                 echo -e "${RED}错误：本地未安装 Xray 核心，请先选择 1 安装核心！${NC}"
                 read -p "按回车键继续..." dummy
                 continue
