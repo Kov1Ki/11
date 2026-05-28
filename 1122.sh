@@ -1,11 +1,10 @@
-script_content = """#!/bin/bash
+#!/bin/bash
 
 # =================================================================
 # 脚本名称: Xray 双协议自动化管理脚本
-# 脚本版本: v1.3 
+# 脚本版本: v1.4 (纯净免Python依赖版)
 # 适用系统: Ubuntu / Debian (x86_64 / arm64)
 # 支持协议: VLESS-XTLS-Reality / VLESS+WS 免流
-# 语言版本: 简体中文版
 # =================================================================
 
 # 定义颜色输出
@@ -92,53 +91,37 @@ view_current_config() {
     echo -e "${BLUE}--------------------------------------------------${NC}"
     echo -e "${YELLOW}【解析生成的客户端导入链接】${NC}"
 
-    # 解析 Reality 链接
+    # 纯 Bash 解析 Reality 链接
     if grep -q '"security": "reality"' "$CONFIG_FILE"; then
-        PORT_REALITY=$(grep -B 3 '"protocol": "vless"' "$CONFIG_FILE" | grep '"port"' | head -n 1 | tr -d -c '0-9')
-        [ -z "$PORT_REALITY" ] && PORT_REALITY=$(grep '"port"' "$CONFIG_FILE" | head -n 1 | tr -d -c '0-9')
-        
-        UUID_REALITY=$(grep '"id"' "$CONFIG_FILE" | head -n 1 | awk -F '"' '{print $4}')
+        PORT_REALITY=$(grep -B 5 '"security": "reality"' "$CONFIG_FILE" | grep '"port"' | head -n 1 | tr -d -c '0-9')
+        UUID_REALITY=$(grep -B 5 '"security": "reality"' "$CONFIG_FILE" | grep '"id"' | head -n 1 | awk -F '"' '{print $4}')
         DEST=$(grep '"dest"' "$CONFIG_FILE" | head -n 1 | awk -F '"' '{print $4}' | awk -F ':' '{print $1}')
         PRIV_KEY=$(grep '"privateKey"' "$CONFIG_FILE" | awk -F '"' '{print $4}')
+        SHORT_ID=$(grep '"shortIds"' "$CONFIG_FILE" -A 1 | tail -n 1 | awk -F '"' '{print $2}')
         
+        PUBLIC_KEY=""
         if [ -n "$PRIV_KEY" ] && [ -f "$XRAY_BIN" ]; then
             PUBLIC_KEY=$($XRAY_BIN x25519 -i "$PRIV_KEY" 2>/dev/null | grep "Public key:" | awk '{print $3}')
         fi
-        SHORT_ID=$(grep '"shortIds"' "$CONFIG_FILE" -A 1 | tail -n 1 | awk -F '"' '{print $2}')
 
         if [ -n "$UUID_REALITY" ] && [ -n "$PORT_REALITY" ]; then
             REALITY_LINK="vless://${UUID_REALITY}@${SERVER_IP}:${PORT_REALITY}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${DEST}&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp#Reality_${SERVER_IP}"
-            echo -e "${PURPLE}❖ VLESS-XTLS-Reality [抗封锁] 链接:${NC}"
+            echo -e "${PURPLE}[+] VLESS-XTLS-Reality [抗封锁] 链接:${NC}"
             echo -e "${CYAN}${REALITY_LINK}${NC}"
             echo -e "--------------------------------------------------"
         fi
     fi
 
-    # 解析 VLESS+WS 免流链接
-    if grep -q '"network": "ws"' "$CONFIG_FILE" || grep -q '"wsSettings"' "$CONFIG_FILE"; then
-        LINKS=$(python3 << EOF
-import json
-try:
-    with open('$CONFIG_FILE') as f:
-        data = json.load(f)
-    ip = '$SERVER_IP'
-    for ib in data.get('inbounds', []):
-        port = ib.get('port')
-        protocol = ib.get('protocol')
-        stream = ib.get('streamSettings', {})
-        net = stream.get('network')
-        if protocol == 'vless' and net == 'ws':
-            uuid = ib['settings']['clients'][0]['id']
-            host = 't7z.cupid.iqiyi.com'
-            link = f'vless://{uuid}@{ip}:{port}?encryption=none&security=none&type=ws&host={host}&path=%2F#VLESS_WS_{ip}'
-            print(link)
-except:
-    pass
-EOF
-)
-        if [ -n "$LINKS" ]; then
-            echo -e "${PURPLE}❖ VLESS+WebSocket [免流专用] 链接:${NC}"
-            echo -e "${CYAN}${LINKS}${NC}"
+    # 纯 Bash 解析 VLESS+WS 免流链接
+    if grep -q '"network": "ws"' "$CONFIG_FILE"; then
+        PORT_WS=$(grep -B 10 '"network": "ws"' "$CONFIG_FILE" | grep '"port"' | tail -n 1 | tr -d -c '0-9')
+        UUID_WS=$(grep -B 10 '"network": "ws"' "$CONFIG_FILE" | grep '"id"' | tail -n 1 | awk -F '"' '{print $4}')
+        HOST_NAME="t7z.cupid.iqiyi.com"
+        
+        if [ -n "$UUID_WS" ] && [ -n "$PORT_WS" ]; then
+            WS_LINK="vless://${UUID_WS}@${SERVER_IP}:${PORT_WS}?encryption=none&security=none&type=ws&host=${HOST_NAME}&path=%2F#VLESS_WS_${SERVER_IP}"
+            echo -e "${PURPLE}[+] VLESS+WebSocket [免流专用] 链接:${NC}"
+            echo -e "${CYAN}${WS_LINK}${NC}"
             echo -e "--------------------------------------------------"
         fi
     fi
@@ -221,16 +204,6 @@ config_xray_flexible() {
             UUID_WS=${USER_WS_UUID:-"afba2d6a-64de-48af-9014-1734c432a893"}
         else
             UUID_WS=$($XRAY_BIN uuid 2>/dev/null || cat /proc/sys/kernel/random/uuid)
-        fi
-
-        echo -e "\n${YELLOW}▶ 免流伪装 Host 设置${NC}"
-        echo -e "1. 使用默认爱奇艺 Host [t7z.cupid.iqiyi.com]\n2. 手动输入自定义 Host"
-        read -p "请选择 [默认 1]: " HOST_CHOICE
-        if [ "${HOST_CHOICE:-1}" -eq 2 ]; then
-            read -p "请输入免流 Host: " HOST_NAME
-            HOST_NAME=${HOST_NAME:-"t7z.cupid.iqiyi.com"}
-        else
-            HOST_NAME="t7z.cupid.iqiyi.com"
         fi
     fi
 
@@ -330,7 +303,7 @@ EOF
 while true; do
     clear
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.3     ${NC}"
+    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.4     ${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo -e " 1. 一键安装 Xray 并配置新协议"
     echo -e " 2. 修改 / 覆盖现有协议配置"
@@ -380,8 +353,3 @@ while true; do
             ;;
     esac
 done
-"""
-
-with open("xray-management-v1.3-zh.sh", "w") as f:
-    f.write(script_content)
-print("Version 1.3 successfully generated.")
