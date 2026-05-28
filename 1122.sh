@@ -2,7 +2,7 @@ script_content = """#!/bin/bash
 
 # =================================================================
 # 脚本名称: Xray 双协议自动化管理脚本
-# 脚本版本: v1.2 
+# 脚本版本: v1.3 
 # 适用系统: Ubuntu / Debian (x86_64 / arm64)
 # 支持协议: VLESS-XTLS-Reality / VLESS+WS 免流
 # 语言版本: 简体中文版
@@ -29,9 +29,9 @@ fi
 
 # 1. 安装或更新 Xray 核心
 install_xray_core() {
-    echo -e "${BLUE}[Xray] 正在调用官方脚本下载/更新核心...${NC}"
+    echo -e "${BLUE}[+] 正在调用官方脚本下载/更新核心...${NC}"
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install --logrotate
-    echo -e "${GREEN}[Xray] 核心部署成功！${NC}"
+    echo -e "${GREEN}[+] 核心部署成功！${NC}"
 }
 
 # 2. 完全卸载 Xray
@@ -42,28 +42,28 @@ uninstall_xray() {
     echo -e "${RED}==================================================${NC}"
     read -p "确定要完全卸载 Xray 吗？该操作不可逆！[y/N]: " CONFIRM_UNINSTALL
     if [[ "$CONFIRM_UNINSTALL" =~ ^[Yy]$ ]]; then
-        echo -e "${BLUE}[Xray] 正在调用官方卸载程序...${NC}"
+        echo -e "${BLUE}[+] 正在调用官方卸载程序...${NC}"
         bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove --purge
-        echo -e "${BLUE}[Xray] 正在清理残留配置文件与日志...${NC}"
+        echo -e "${BLUE}[+] 正在清理残留配置文件与日志...${NC}"
         rm -rf /usr/local/etc/xray
         rm -rf /var/log/xray
-        echo -e "${GREEN}[Xray] 卸载完成，所有相关核心、配置及日志已彻底清除。${NC}"
+        echo -e "${GREEN}[+] 卸载完成，所有相关核心、配置及日志已彻底清除。${NC}"
     else
-        echo -e "${YELLOW}[Xray] 已取消卸载操作。${NC}"
+        echo -e "${YELLOW}[+] 已取消卸载操作。${NC}"
     fi
     read -p "按回车键返回主菜单..." dummy
 }
 
 # 3. 更新管理脚本本身
 update_management_script() {
-    echo -e "${BLUE}[Xray] 正在从 GitHub 获取最新脚本...${NC}"
+    echo -e "${BLUE}[+] 正在从 GitHub 获取最新脚本...${NC}"
     CURRENT_SCRIPT=$(readlink -f "$0")
     
     curl -s -L "$SCRIPT_URL" -o "${CURRENT_SCRIPT}.tmp"
     if [ $? -eq 0 ] && [ -s "${CURRENT_SCRIPT}.tmp" ]; then
         mv "${CURRENT_SCRIPT}.tmp" "$CURRENT_SCRIPT"
         chmod +x "$CURRENT_SCRIPT"
-        echo -e "${GREEN}[Xray] 脚本已成功更新至最新版本！请重新运行脚本。${NC}"
+        echo -e "${GREEN}[+] 脚本已成功更新至最新版本！请重新运行脚本。${NC}"
         exit 0
     else
         rm -f "${CURRENT_SCRIPT}.tmp"
@@ -330,7 +330,7 @@ EOF
 while true; do
     clear
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.2     ${NC}"
+    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.3     ${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo -e " 1. 一键安装 Xray 并配置新协议"
     echo -e " 2. 修改 / 覆盖现有协议配置"
@@ -361,7 +361,7 @@ while true; do
         4)
             install_xray_core
             systemctl restart xray >/dev/null 2>&1
-            echo -e "${GREEN}>>> Xray 核心更新成功并已重启！${NC}"
+            echo -e "${GREEN}[+] Xray 核心更新成功并已重启！${NC}"
             read -p "按回车键继续..." dummy
             ;;
         5)
@@ -382,6 +382,6 @@ while true; do
 done
 """
 
-with open("xray-management-v1.2-zh.sh", "w") as f:
+with open("xray-management-v1.3-zh.sh", "w") as f:
     f.write(script_content)
-print("Version 1.2 successfully generated.")
+print("Version 1.3 successfully generated.")
