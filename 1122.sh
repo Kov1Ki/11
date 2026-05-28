@@ -2,7 +2,7 @@
 
 # =================================================================
 # 脚本名称: Xray 双协议自动化管理脚本
-# 脚本版本: v1.5 (修复无配置文件夹报错版)
+# 脚本版本: v1.6 (精准链接解析对齐版)
 # 适用系统: Ubuntu / Debian (x86_64 / arm64)
 # 支持协议: VLESS-XTLS-Reality / VLESS+WS 免流
 # =================================================================
@@ -18,7 +18,6 @@ NC='\033[0m'
 
 CONFIG_FILE="/usr/local/etc/xray/config.json"
 XRAY_BIN="/usr/local/bin/xray"
-SCRIPT_URL="https://raw.githubusercontent.com/Kov1Ki/11/refs/heads/main/1122.sh"
 
 # 检查 root 权限
 if [[ $EUID -ne 0 ]]; then
@@ -53,25 +52,7 @@ uninstall_xray() {
     read -p "按回车键返回主菜单..." dummy
 }
 
-# 3. 更新管理脚本本身
-update_management_script() {
-    echo -e "${BLUE}[+] 正在从 GitHub 获取最新脚本...${NC}"
-    CURRENT_SCRIPT=$(readlink -f "$0")
-    
-    curl -s -L "$SCRIPT_URL" -o "${CURRENT_SCRIPT}.tmp"
-    if [ $? -eq 0 ] && [ -s "${CURRENT_SCRIPT}.tmp" ]; then
-        mv "${CURRENT_SCRIPT}.tmp" "$CURRENT_SCRIPT"
-        chmod +x "$CURRENT_SCRIPT"
-        echo -e "${GREEN}[+] 脚本已成功更新至最新版本！请重新运行脚本。${NC}"
-        exit 0
-    else
-        rm -f "${CURRENT_SCRIPT}.tmp"
-        echo -e "${RED}错误：脚本下载失败，请检查服务器网络或 GitHub 链接是否有效！${NC}"
-        read -p "按回车键继续..." dummy
-    fi
-}
-
-# 4. 解析并展示当前配置与链接
+# 3. 解析并展示当前配置与链接
 view_current_config() {
     clear
     echo -e "${BLUE}==================================================${NC}"
@@ -91,13 +72,13 @@ view_current_config() {
     echo -e "${BLUE}--------------------------------------------------${NC}"
     echo -e "${YELLOW}【解析生成的客户端导入链接】${NC}"
 
-    # 纯 Bash 解析 Reality 链接
+    # 纯 Bash 解析 Reality 链接 (修复错位提取)
     if grep -q '"security": "reality"' "$CONFIG_FILE"; then
         PORT_REALITY=$(grep -B 5 '"security": "reality"' "$CONFIG_FILE" | grep '"port"' | head -n 1 | tr -d -c '0-9')
-        UUID_REALITY=$(grep -B 5 '"security": "reality"' "$CONFIG_FILE" | grep '"id"' | head -n 1 | awk -F '"' '{print $4}')
-        DEST=$(grep '"dest"' "$CONFIG_FILE" | head -n 1 | awk -F '"' '{print $4}' | awk -F ':' '{print $1}')
-        PRIV_KEY=$(grep '"privateKey"' "$CONFIG_FILE" | awk -F '"' '{print $4}')
-        SHORT_ID=$(grep '"shortIds"' "$CONFIG_FILE" -A 1 | tail -n 1 | awk -F '"' '{print $2}')
+        UUID_REALITY=$(grep -B 5 '"security": "reality"' "$CONFIG_FILE" | grep '"id"' | head -n 1 | awk -F'"' '{for(i=1;i<=NF;i++) if($i=="id") print $(i+2)}')
+        DEST=$(grep '"dest"' "$CONFIG_FILE" | awk -F'"' '{for(i=1;i<=NF;i++) if($i=="dest") print $(i+2)}' | awk -F':' '{print $1}')
+        PRIV_KEY=$(grep '"privateKey"' "$CONFIG_FILE" | awk -F'"' '{for(i=1;i<=NF;i++) if($i=="privateKey") print $(i+2)}')
+        SHORT_ID=$(grep '"shortIds"' "$CONFIG_FILE" | awk -F'"' '{for(i=1;i<=NF;i++) if($i=="shortIds") print $(i+2)}')
         
         PUBLIC_KEY=""
         if [ -n "$PRIV_KEY" ] && [ -f "$XRAY_BIN" ]; then
@@ -105,21 +86,21 @@ view_current_config() {
         fi
 
         if [ -n "$UUID_REALITY" ] && [ -n "$PORT_REALITY" ]; then
-            REALITY_LINK="vless://${UUID_REALITY}@${SERVER_IP}:${PORT_REALITY}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${DEST}&pbk=${PUBLIC_KEY}&sid=${SHORT_ID}&type=tcp#Reality_${SERVER_IP}"
+            REALITY_LINK="vless://${UUID_REALITY}@${SERVER_IP}:${PORT_REALITY}?security=reality&encryption=none&pbk=${PUBLIC_KEY}&headerType=none&fp=chrome&type=tcp&flow=xtls-rprx-vision&sni=${DEST}&sid=${SHORT_ID}#Reality_${SERVER_IP}"
             echo -e "${PURPLE}[+] VLESS-XTLS-Reality [抗封锁] 链接:${NC}"
             echo -e "${CYAN}${REALITY_LINK}${NC}"
             echo -e "--------------------------------------------------"
         fi
     fi
 
-    # 纯 Bash 解析 VLESS+WS 免流链接
+    # 纯 Bash 解析 VLESS+WS 免流链接 (精准对齐标准导入格式)
     if grep -q '"network": "ws"' "$CONFIG_FILE"; then
         PORT_WS=$(grep -B 10 '"network": "ws"' "$CONFIG_FILE" | grep '"port"' | tail -n 1 | tr -d -c '0-9')
-        UUID_WS=$(grep -B 10 '"network": "ws"' "$CONFIG_FILE" | grep '"id"' | tail -n 1 | awk -F '"' '{print $4}')
+        UUID_WS=$(grep -B 10 '"network": "ws"' "$CONFIG_FILE" | grep '"id"' | tail -n 1 | awk -F'"' '{for(i=1;i<=NF;i++) if($i=="id") print $(i+2)}')
         HOST_NAME="t7z.cupid.iqiyi.com"
         
         if [ -n "$UUID_WS" ] && [ -n "$PORT_WS" ]; then
-            WS_LINK="vless://${UUID_WS}@${SERVER_IP}:${PORT_WS}?encryption=none&security=none&type=ws&host=${HOST_NAME}&path=%2F#VLESS_WS_${SERVER_IP}"
+            WS_LINK="vless://${UUID_WS}@${SERVER_IP}:${PORT_WS}?path=%2F&security=&encryption=none&host=${HOST_NAME}&type=ws#VLESS_WS_${SERVER_IP}"
             echo -e "${PURPLE}[+] VLESS+WebSocket [免流专用] 链接:${NC}"
             echo -e "${CYAN}${WS_LINK}${NC}"
             echo -e "--------------------------------------------------"
@@ -129,7 +110,7 @@ view_current_config() {
     read -p "按回车键返回主菜单..." dummy
 }
 
-# 5. 灵活配置向导
+# 4. 灵活配置向导
 config_xray_flexible() {
     clear
     echo -e "${BLUE}==================================================${NC}"
@@ -139,7 +120,7 @@ config_xray_flexible() {
     ENABLE_REALITY=false
     ENABLE_WS=false
 
-    # 5.1 询问配置 Reality
+    # 4.1 询问配置 Reality
     read -p "是否启用 VLESS-XTLS-Reality？[y/N]: " CHOOSE_REALITY
     if [[ "$CHOOSE_REALITY" =~ ^[Yy]$ ]]; then
         ENABLE_REALITY=true
@@ -169,7 +150,7 @@ config_xray_flexible() {
         DEST=${DEST:-www.microsoft.com}
     fi
 
-    # 5.2 询问配置 VLESS+WS 免流
+    # 4.2 询问配置 VLESS+WS 免流
     echo -e "${BLUE}--------------------------------------------------${NC}"
     read -p "是否启用 VLESS+WS [免流方案]？[y/N]: " CHOOSE_WS
     if [[ "$CHOOSE_WS" =~ ^[Yy]$ ]]; then
@@ -270,7 +251,7 @@ EOF
         fi
     fi
 
-    # 强制创建父文件夹防止因刚卸载后文件夹丢失导致的写入失败
+    # 强制创建父文件夹
     mkdir -p /usr/local/etc/xray
 
     # 写入文件
@@ -306,17 +287,16 @@ EOF
 while true; do
     clear
     echo -e "${GREEN}========================================${NC}"
-    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.5     ${NC}"
+    echo -e "${GREEN}    Xray 自动化管理脚本 稳定版 v1.6     ${NC}"
     echo -e "${GREEN}========================================${NC}"
     echo -e " 1. 一键安装 Xray 并配置新协议"
     echo -e " 2. 修改 / 覆盖现有协议配置"
     echo -e " 3. 查看当前协议配置与链接"
     echo -e " 4. 仅更新 Xray 核心版本"
     echo -e " 5. 一键卸载 Xray 核心及配置"
-    echo -e " 6. 更新本管理脚本"
     echo -e " 0. 退出脚本"
     echo -e "${GREEN}========================================${NC}"
-    read -p "请选择操作 [0-6]: " choice
+    read -p "请选择操作 [0-5]: " choice
 
     case $choice in
         1)
@@ -342,9 +322,6 @@ while true; do
             ;;
         5)
             uninstall_xray
-            ;;
-        6)
-            update_management_script
             ;;
         0)
             echo "退出脚本。"
